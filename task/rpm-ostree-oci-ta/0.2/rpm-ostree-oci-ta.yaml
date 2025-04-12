@@ -104,7 +104,7 @@ spec:
         name: workdir
   steps:
     - name: use-trusted-artifact
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:bc10298bff7805d8bc98211cd4534b9720f365f35ce0ef263dd65802de7ff036
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:23953da08db809f841120214055aeb238bc553368e366feb58495d5a5493b19a
       args:
         - use
         - $(params.SOURCE_ARTIFACT)=/var/workdir/source
@@ -234,14 +234,14 @@ spec:
         - mountPath: /var/lib/containers
           name: varlibcontainers
       script: |
-        syft oci-dir:/var/lib/containers/rhtap-final-image --output cyclonedx-json=/var/workdir/sbom-cyclonedx.json
+        syft oci-dir:/var/lib/containers/rhtap-final-image --output cyclonedx-json="/var/workdir/sbom-cyclonedx.json" --source-name "${IMAGE%:*}@$(cat "$(results.IMAGE_DIGEST.path)")"
       computeResources:
         limits:
           memory: 6Gi
         requests:
           memory: 6Gi
     - name: merge-cachi2-sbom
-      image: quay.io/redhat-appstudio/sbom-utility-scripts-image@sha256:9900dbca3454fd7036d04acca02b33c7cfe6d984606747ea1fee2418b5597395
+      image: quay.io/konflux-ci/sbom-utility-scripts@sha256:8f6e3348367e5dd418f49e4394afec92c9d7ff7cf3d333ba96ccba3f07eede0b
       workingDir: /var/workdir
       script: |
         cachi2_sbom=./cachi2/output/bom.json
@@ -303,7 +303,7 @@ spec:
             - SETFCAP
         runAsUser: 0
     - name: upload-sbom
-      image: quay.io/konflux-ci/appstudio-utils:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9@sha256:24179f0efd06c65d16868c2d7eb82573cce8e43533de6cea14fec3b7446e0b14
+      image: quay.io/konflux-ci/appstudio-utils:48c311af02858e2422d6229600e9959e496ddef1@sha256:91ddd999271f65d8ec8487b10f3dd378f81aa894e11b9af4d10639fd52bba7e8
       workingDir: /var/workdir
       script: |
         cosign attach sbom --sbom sbom-cyclonedx.json --type cyclonedx "$(cat "$(results.IMAGE_REF.path)")"

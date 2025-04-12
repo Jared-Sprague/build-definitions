@@ -11,7 +11,7 @@ spec:
   description: |-
     Scans source code for security vulnerabilities, including common issues such as SQL injection, cross-site scripting (XSS), and code injection attacks using Snyk Code, a Static Application Security Testing (SAST) tool.
 
-    Follow the steps given [here](https://redhat-appstudio.github.io/docs.appstudio.io/Documentation/main/how-to-guides/testing_applications/enable_snyk_check_for_a_product/) to obtain a snyk-token and to enable the snyk task in a Pipeline.
+    Follow the steps given [here](https://konflux-ci.dev/docs/testing/build/snyk/) to obtain a snyk-token and to enable the snyk task in a Pipeline.
 
     The snyk binary used in this Task comes from a container image defined in https://github.com/konflux-ci/konflux-test
 
@@ -46,9 +46,12 @@ spec:
       default: "true"
     - name: KFP_GIT_URL
       type: string
-      description: URL from repository to download known false positives files
-      # FIXME: Red Hat internal projects will default to https://gitlab.cee.redhat.com/osh/known-false-positives.git when KONFLUX-4530 is resolved
-      default: ""
+      description: Known False Positives (KFP) git URL (optionally taking
+        a revision delimited by \#). Defaults to "SITE_DEFAULT", which means
+        the default value "https://gitlab.cee.redhat.com/osh/known-false-positives.git" for internal Konflux
+        instance and empty string for external Konflux instance.
+        If set to an empty string, the KFP filtering is disabled.
+      default: "SITE_DEFAULT"
     - name: PROJECT_NAME
       type: string
       description: Name of the scanned project, used to find path exclusions. By default, the Konflux component name will be used.
@@ -57,6 +60,10 @@ spec:
       type: string
       description: Write excluded records in file. Useful for auditing (defaults to false).
       default: "false"
+    - name: IGNORE_FILE_PATHS
+      type: string
+      description: Directories or files to be excluded from Snyk scan (Comma-separated). Useful to split the directories of a git repo across multiple components.
+      default: ""
   volumes:
     - name: snyk-secret
       secret:
@@ -71,7 +78,7 @@ spec:
         optional: true
   steps:
     - name: sast-snyk-check
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.20@sha256:f9db697d8a45870b862252de61b3c29d9d6f79272ef8bf61ecb645f8bca27705
       # per https://kubernetes.io/docs/concepts/containers/images/#imagepullpolicy-defaulting
       # the cluster will set imagePullPolicy to IfNotPresent
       workingDir: $(workspaces.workspace.path)/hacbs/$(context.task.name)
@@ -87,6 +94,8 @@ spec:
           value: $(params.SNYK_SECRET)
         - name: ARGS
           value: $(params.ARGS)
+        - name: IGNORE_FILE_PATHS
+          value: $(params.IGNORE_FILE_PATHS)
         - name: IMP_FINDINGS_ONLY
           value: $(params.IMP_FINDINGS_ONLY)
         - name: KFP_GIT_URL
@@ -99,6 +108,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['appstudio.openshift.io/component']
+        - name: BUILD_PLR_LOG_URL
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['pipelinesascode.tekton.dev/log-url']
       script: |
         #!/usr/bin/env bash
 
@@ -129,7 +142,7 @@ spec:
         else
           # According to shellcheck documentation, the following error can be ignored as it is ignored through indirection: https://www.shellcheck.net/wiki/SC2034
           # shellcheck disable=SC2034
-          to_enable_snyk='[here](https://redhat-appstudio.github.io/docs.appstudio.io/Documentation/main/how-to-guides/testing_applications/enable_snyk_check_for_a_product/)'
+          to_enable_snyk='[here](https://konflux-ci.dev/docs/testing/build/snyk/)'
           note="Task $(context.task.name) skipped: If you wish to use the Snyk code SAST task, please create a secret name snyk-secret with the key 'snyk_token' containing the Snyk token by following the steps given ${to_enable_snyk}"
           TEST_OUTPUT=$(make_result_json -r SKIPPED -t "$note")
           echo "${TEST_OUTPUT}" | tee "$(results.TEST_OUTPUT.path)"
@@ -142,6 +155,12 @@ spec:
         if [ "${IMP_FINDINGS_ONLY}" == "false" ]; then
           SEVERITY_THRESHOLD="low"
         fi
+
+        # We ignore files using snyk ignore if the user set up the IGNORE_FILE_PATHS variable.
+        (cd "${SOURCE_CODE_DIR}" && IFS="," && for path in $IGNORE_FILE_PATHS; do
+          snyk ignore --file-path="source/${path}"
+        done)
+
         set +e
         # We do want to expand ARGS (it can be multiple CLI flags, not just one)
         # shellcheck disable=SC2086
@@ -160,6 +179,19 @@ spec:
 
           echo "Results:"
           (set -x && csgrep --mode=evtstat sast_snyk_check_out_all_findings.json)
+
+          if [[ "${KFP_GIT_URL}" == "SITE_DEFAULT" ]]; then
+            # Set KFP_GIT_URL to https://gitlab.cee.redhat.com/osh/known-false-positives.git for internal Konflux instances
+            PROBE_URL="https://gitlab.cee.redhat.com/osh/known-false-positives"
+            echo -n "Probing ${PROBE_URL}... "
+            if curl --fail --head --max-time 60 --no-progress-meter "${PROBE_URL}" > >(head -1); then
+              echo "Setting KFP_GIT_URL to https://gitlab.cee.redhat.com/osh/known-false-positives.git"
+              KFP_GIT_URL="https://gitlab.cee.redhat.com/osh/known-false-positives.git"
+            else
+              echo "Setting KFP_GIT_URL to empty string"
+              KFP_GIT_URL=
+            fi
+          fi
 
           # We check if the KFP_GIT_URL variable is set to apply the filters or not
           if [[ -z "${KFP_GIT_URL}" ]]; then
@@ -193,7 +225,30 @@ spec:
             (set -x && csgrep --mode=evtstat filtered_sast_snyk_check_out.json)
           fi
 
-          csgrep --mode=sarif filtered_sast_snyk_check_out.json > sast_snyk_check_out.sarif
+          # Generation of scan stats
+
+          total_files=$(jq '[.runs[0].properties.coverage[].files] | add' "${SOURCE_CODE_DIR}"/sast_snyk_check_out.json)
+          supported_files=$(jq '[.runs[0].properties.coverage[] | select(.type == "SUPPORTED") | .files] | add' "${SOURCE_CODE_DIR}"/sast_snyk_check_out.json)
+
+          # We make sure the values are 0 if no supported/total files are found
+          if [ "$total_files" = "null" ] || [ -z "$total_files" ]; then
+            total_files=0
+          fi
+
+          if [ "$supported_files" = "null" ] || [ -z "$supported_files" ]; then
+            supported_files=0
+          fi
+
+          coverage_ratio=0
+          if (( total_files > 0 )); then
+              coverage_ratio=$((supported_files * 100 / total_files))
+          fi
+
+          # embed stats in results file and convert to SARIF
+          csgrep --mode=sarif --set-scan-prop snyk-scanned-files-coverage:"${coverage_ratio}" \
+                              --set-scan-prop snyk-scanned-files-success:"${supported_files}"  \
+                              --set-scan-prop snyk-scanned-files-total:"${total_files}" \
+                              filtered_sast_snyk_check_out.json  > sast_snyk_check_out.sarif
 
           TEST_OUTPUT=
           parse_test_output "$(context.task.name)" sarif sast_snyk_check_out.sarif  || true
@@ -211,8 +266,13 @@ spec:
         echo "${TEST_OUTPUT:-${ERROR_OUTPUT}}" | tee "$(results.TEST_OUTPUT.path)"
 
     - name: upload
-      image: quay.io/konflux-ci/oras:latest@sha256:f4b891ee3038a5f13cd92ff4f473faad5601c2434d1c6b9bccdfc134d9d5f820
+      image: quay.io/konflux-ci/oras:latest@sha256:d9fea2ee280880feef6909bef3e18318444231c83736bcc41d54b4e5064f23c9
       workingDir: $(workspaces.workspace.path)/hacbs/$(context.task.name)
+      volumeMounts:
+        - mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
+          name: trusted-ca
+          readOnly: true
+          subPath: ca-bundle.crt
       env:
         - name: IMAGE_URL
           value: $(params.image-url)

@@ -34,7 +34,7 @@ spec:
         readOnly: true
   steps:
     - name: apply-additional-tags-from-parameter
-      image: registry.access.redhat.com/ubi9/skopeo:9.4-14.1728984400@sha256:891ee232a9319ed0f675c318f9605422bde7436328e7faec7dc896a206a78e54
+      image: registry.access.redhat.com/ubi9/skopeo:9.5-1744118252@sha256:e68e3e3cb40e03d9df197b6c496e75847c40b7e76c1a2a376cc179b4d5f5907d
       args:
         - $(params.ADDITIONAL_TAGS[*])
       env:
@@ -54,14 +54,14 @@ spec:
         fi
 
     - name: apply-additional-tags-from-image-label
-      image: registry.access.redhat.com/ubi9/skopeo:9.4-14.1728984400@sha256:891ee232a9319ed0f675c318f9605422bde7436328e7faec7dc896a206a78e54
+      image: registry.access.redhat.com/ubi9/skopeo:9.5-1744118252@sha256:e68e3e3cb40e03d9df197b6c496e75847c40b7e76c1a2a376cc179b4d5f5907d
       env:
       - name: IMAGE
         value: $(params.IMAGE)
       script: |
         #!/bin/bash
 
-        ADDITIONAL_TAGS_FROM_IMAGE_LABEL=$(skopeo inspect --format '{{ index .Labels "konflux.additional-tags" }}' docker://$IMAGE)
+        ADDITIONAL_TAGS_FROM_IMAGE_LABEL=$(skopeo inspect --no-tags --format '{{ index .Labels "konflux.additional-tags" }}' "docker://$IMAGE")
 
         if [ -n "${ADDITIONAL_TAGS_FROM_IMAGE_LABEL}" ]; then
           IFS=', ' read -r -a tags_array <<< "$ADDITIONAL_TAGS_FROM_IMAGE_LABEL"

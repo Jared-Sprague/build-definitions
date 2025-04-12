@@ -45,6 +45,9 @@ spec:
       Note this needs to be passed as a YAML-formatted config dump, not as a file path!
     name: config-file-content
     default: ""
+  - name: sbom-type
+    default: cyclonedx
+    description: "Select the SBOM format to generate. Valid values: spdx, cyclonedx."
   - name: caTrustConfigMapName
     type: string
     description: The name of the ConfigMap to read CA bundle data from.
@@ -53,6 +56,10 @@ spec:
     type: string
     description: The name of the key in the ConfigMap that contains the CA bundle data.
     default: ca-bundle.crt
+  - name: ACTIVATION_KEY
+    default: activation-key
+    description: Name of secret which contains subscription activation key
+    type: string
 
   stepTemplate:
     env:
@@ -61,10 +68,11 @@ spec:
     volumeMounts:
       - name: config
         mountPath: /mnt/config
-
+      - mountPath: /shared
+        name: shared
   steps:
   - name: sanitize-cachi2-config-file-with-yq
-    image: quay.io/konflux-ci/yq:latest@sha256:4ce1f9431020387eb6c33a28a46e079b0c28b97f916243d150e70a09e41ce6b4
+    image: quay.io/konflux-ci/yq:latest@sha256:1b078faee108f1f9b447cce1c8b7c7ca6d5cfb4de7dc762c9743a3090c307eef
     script: |
       if [ -n "${CONFIG_FILE_CONTENT}" ]
       then
@@ -74,10 +82,10 @@ spec:
         yq 'del(.goproxy_url)' <<< "${CONFIG_FILE_CONTENT}" > /mnt/config/config.yaml
       fi
 
-  - image: quay.io/redhat-appstudio/cachi2:0.13.0@sha256:eb34cfe3fea20997eebd8164dc93eedb2fd7a60dc1fb4afcc1b1ff43df9d6667
+  - name: prefetch-dependencies
+    image: quay.io/konflux-ci/cachi2:0.22.2@sha256:c24dbc207b0eca1fe742a53b50feca2182dc0f998e5b91af6a7c94c3132bdcd0
     # per https://kubernetes.io/docs/concepts/containers/images/#imagepullpolicy-defaulting
     # the cluster will set imagePullPolicy to IfNotPresent
-    name: prefetch-dependencies
     env:
     - name: INPUT
       value: $(params.input)
@@ -85,6 +93,8 @@ spec:
       value: $(params.dev-package-managers)
     - name: LOG_LEVEL
       value: $(params.log-level)
+    - name: SBOM_TYPE
+      value: $(params.sbom-type)
     - name: WORKSPACE_GIT_AUTH_BOUND
       value: $(workspaces.git-basic-auth.bound)
     - name: WORKSPACE_GIT_AUTH_PATH
@@ -97,9 +107,125 @@ spec:
       - name: trusted-ca
         mountPath: /mnt/trusted-ca
         readOnly: true
+      - mountPath: /activation-key
+        name: activation-key
+    computeResources:
+      limits:
+        memory: 3Gi
+      requests:
+        cpu: '1'
+        memory: 3Gi
     script: |
-      if [ -z "${INPUT}" ]
-      then
+      #!/bin/bash
+      set -euo pipefail
+
+      RHSM_ORG=""
+      RHSM_ACT_KEY=""
+      ENTITLEMENT_CERT_PATH=""
+      ENTITLEMENT_CERT_KEY_PATH=""
+
+      function rhsm_unregister {
+        # best effort:
+        #   - if the system was already successfully unregistered, the command returns 1
+        #   - if unregistering failed/fails, there's not much we can do about it anyway
+        subscription-manager unregister || true
+      }
+
+      function is_json
+      {
+        jq . 2>/dev/null 1>&2 <<< "$1"
+      }
+
+      # The input JSON can be in one of these forms:
+      # 1) '[{"type": "gomod"}, {"type": "bundler"}]'
+      # 2) '{"packages": [{"type": "gomod"}, {"type": "bundler"}]}'
+      # 3) '{"type": "gomod"}'
+      function input_json_has_rpm
+      {
+        jq '
+          if (type == "array" or type == "object") | not then
+            false
+          elif type == "array" then
+            any(.[]; .type == "rpm")
+          elif has("packages") | not then
+            .type == "rpm"
+          elif (.packages | type == "array") then
+            any(.packages[]; .type == "rpm")
+          else
+            false
+          end' <<< "$1"
+      }
+
+      function inject_ssl_opts
+      {
+        input="$1"
+        ssl_options="$2"
+
+        # Check if input is plain string or JSON and if the request specifies RPMs
+        if [ "$input" == "rpm" ]; then
+          input="$(jq -n --argjson ssl "$ssl_options" '
+                    {
+                      type: "rpm",
+                      options: {
+                        ssl: $ssl
+                      }
+                    }'
+                  )"
+        elif is_json "$input" && [[ $(input_json_has_rpm "$input") == true ]]; then
+          # The output JSON may need the SSL options updated for the RPM backend
+          input="$(jq \
+                    --argjson ssl "$ssl_options" '
+                      if type == "array" then
+                        map(if .type == "rpm" then .options.ssl += $ssl else . end)
+                      elif has("packages") then
+                        .packages |= map(if .type == "rpm" then .options.ssl += $ssl else . end)
+                      else
+                        .options.ssl += $ssl
+                      end' \
+                      <<< "$input"
+                  )"
+        fi
+        echo "$input"
+      }
+
+      function inject_rpm_summary_flag
+      {
+        input="$1"
+
+        if [ "$input" == "rpm" ]; then
+          input="$(jq -n '{type: "rpm", include_summary_in_sbom: true}')"
+
+        elif is_json "$input" && [[ $(input_json_has_rpm "$input") == true ]]; then
+            input="$(jq '
+                      if type == "array" then
+                        map(
+                          if .type == "rpm" and (has("include_summary_in_sbom") | not) then
+                            .include_summary_in_sbom = true
+                          else
+                            .
+                          end)
+
+                      elif has("packages") then
+                        .packages |= map(
+                          if .type == "rpm" and (has("include_summary_in_sbom") | not) then
+                            .include_summary_in_sbom = true
+                          else
+                            .
+                          end)
+
+                      else
+                        if has("include_summary_in_sbom") | not then
+                          .include_summary_in_sbom = true
+                        else
+                          .
+                        end
+
+                      end' <<< "$input")"
+        fi
+        echo "$input"
+      }
+
+      if [ -z "${INPUT}" ]; then
         # Confirm input was provided though it's likely the whole task would be skipped if it wasn't
         echo "No prefetch will be performed because no input was provided for cachi2 fetch-deps"
         exit 0
@@ -146,10 +272,41 @@ spec:
         update-ca-trust
       fi
 
+      # RHSM HANDLING: REGISTER RHSM & CACHI2 CONFIGURATION
+      if [ -e /activation-key/org ]; then
+        RHSM_ORG=$(cat /activation-key/org)
+        RHSM_ACT_KEY=$(cat /activation-key/activationkey)
+
+        echo "Registering with Red Hat subscription manager."
+        subscription-manager register \
+            --org "${RHSM_ORG}" \
+            --activationkey "${RHSM_ACT_KEY}" || exit 1
+
+        trap rhsm_unregister EXIT
+
+        entitlement_files="$(ls -1 /etc/pki/entitlement/*.pem)"
+        ENTITLEMENT_CERT_KEY_PATH="$(grep -e '-key.pem$' <<< "$entitlement_files")"
+        ENTITLEMENT_CERT_PATH="$(grep -v -e '-key.pem$' <<< "$entitlement_files")"
+        CA_BUNDLE_PATH="/etc/rhsm/ca/redhat-uep.pem"
+
+        CACHI2_SSL_OPTS="$(jq -n \
+                              --arg key "$ENTITLEMENT_CERT_KEY_PATH" \
+                              --arg cert "$ENTITLEMENT_CERT_PATH" \
+                              --arg ca_bundle "$CA_BUNDLE_PATH" \
+                              '{client_key: $key, client_cert: $cert, ca_bundle: $ca_bundle}'
+                          )"
+
+        # We need to modify the cachi2 params in place if we're processing RPMs
+        INPUT=$(inject_ssl_opts "$INPUT" "$CACHI2_SSL_OPTS")
+      fi
+
+      INPUT=$(inject_rpm_summary_flag "$INPUT")
+
       cachi2 --log-level="$LOG_LEVEL" $config_flag fetch-deps \
       $dev_pacman_flag \
       --source=$(workspaces.source.path)/source \
       --output=$(workspaces.source.path)/cachi2/output \
+      --sbom-output-type="$SBOM_TYPE" \
       "${INPUT}"
 
       cachi2 --log-level="$LOG_LEVEL" generate-env $(workspaces.source.path)/cachi2/output \
@@ -159,6 +316,12 @@ spec:
 
       cachi2 --log-level="$LOG_LEVEL" inject-files $(workspaces.source.path)/cachi2/output \
       --for-output-dir=/cachi2/output
+
+      # hack: the OCI generator would delete the function since it doesn't consider trap a "usage"
+      if false; then
+        rhsm_unregister
+      fi
+
   workspaces:
   - name: source
     description: Workspace with the source code, cachi2 artifacts will be stored on the workspace as well
@@ -175,6 +338,14 @@ spec:
       performing http(s) requests.
     optional: true
   volumes:
+    - name: shared
+      emptyDir: {}
+    - name: etc-pki-entitlement
+      emptyDir: {}
+    - name: activation-key
+      secret:
+        optional: true
+        secretName: $(params.ACTIVATION_KEY)
     - name: trusted-ca
       configMap:
         name: $(params.caTrustConfigMapName)

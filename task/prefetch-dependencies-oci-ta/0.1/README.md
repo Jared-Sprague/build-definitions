@@ -26,6 +26,7 @@ params:
 ## Parameters
 |name|description|default value|required|
 |---|---|---|---|
+|ACTIVATION_KEY|Name of secret which contains subscription activation key|activation-key|false|
 |SOURCE_ARTIFACT|The Trusted Artifact URI pointing to the artifact with the application source code.||true|
 |caTrustConfigMapKey|The name of the key in the ConfigMap that contains the CA bundle data.|ca-bundle.crt|false|
 |caTrustConfigMapName|The name of the ConfigMap to read CA bundle data from.|trusted-ca|false|
@@ -35,6 +36,7 @@ params:
 |log-level|Set cachi2 log level (debug, info, warning, error)|info|false|
 |ociArtifactExpiresAfter|Expiration date for the trusted artifacts created in the OCI repository. An empty string means the artifacts do not expire.|""|false|
 |ociStorage|The OCI repository where the Trusted Artifacts are stored.||true|
+|sbom-type|Select the SBOM format to generate. Valid values: spdx, cyclonedx.|cyclonedx|false|
 
 ## Results
 |name|description|

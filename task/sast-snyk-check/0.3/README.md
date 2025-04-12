@@ -10,18 +10,19 @@ Snyk's SAST tool uses a combination of static analysis and machine learning tech
 
 ## Params:
 
-| name                  | description                                                                                                        | default value                                             | required |
-|-----------------------|--------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|----------|
-| SNYK_SECRET           | Name of secret which contains Snyk token.                                                                          | snyk-secret                                               | true     |
-| ARGS                  | Append arguments.                                                                                                  | ""                                                        | false    |
-| IMP_FINDINGS_ONLY     | Report only important findings.  To report all findings, specify "false"                                           | true                                                      | true     |
-| KFP_GIT_URL           | Link to the known-false-positives repository. If left blank, results won't be filtered                             | ""                                                        | false    |
-| PROJECT_NAME          | Name of the scanned project, used to find path exclusions. By default, the Konflux component name will be used.    | ${metadata.labels['appstudio.openshift.io/component']}    | false    |
-| RECORD_EXCLUDED       | Write excluded records in file. Useful for auditing.                                                               | false                                                     | false    |
+| name               | description                                                                                                                                      | default value | required |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|---------------|----------|
+| SNYK_SECRET        | Name of secret which contains Snyk token.                                                                                                        | snyk-secret   | true     |
+| ARGS               | Append arguments.                                                                                                                                | ""            | false    |
+| IGNORE_FILE_PATHS  | Directories or files to be excluded from Snyk scan (Comma-separated). Useful to split the directories of a git repo across multiple components.  | ""            | false    |
+| IMP_FINDINGS_ONLY  | Report only important findings.  To report all findings, specify "false"                                                                         | true          | true     |
+| KFP_GIT_URL        | Known False Positives (KFP) git URL (optionally taking a revision delimited by \#). Defaults to "SITE_DEFAULT", which means the default value "https://gitlab.cee.redhat.com/osh/known-false-positives.git" for internal Konflux instance and empty string for external Konflux instance. If set to an empty string, the KFP filtering is disabled.|SITE_DEFAULT|false|
+| PROJECT_NAME       | Name of the scanned project, used to find path exclusions. By default, the Konflux component name will be used.                                  | ""            | false    |
+| RECORD_EXCLUDED    | Write excluded records in file. Useful for auditing.                                                                                             | false         | false    |
 
 ## How to obtain a snyk-token and enable snyk task on the pipeline:
 
-Follow the steps given [here](https://redhat-appstudio.github.io/docs.appstudio.io/Documentation/main/how-to-guides/testing_applications/enable_snyk_check_for_a_product/)
+Follow the steps given [here](https://konflux-ci.dev/docs/testing/build/snyk/)
 
 ## Results:
 

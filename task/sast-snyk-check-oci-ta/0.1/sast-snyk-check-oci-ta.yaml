@@ -53,12 +53,12 @@ spec:
         name: workdir
   steps:
     - name: use-trusted-artifact
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:e0e457b6af10e44ff6b90208a9e69adc863a865e1c062c4cb84bf3846037d74d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:23953da08db809f841120214055aeb238bc553368e366feb58495d5a5493b19a
       args:
         - use
         - $(params.SOURCE_ARTIFACT)=/var/workdir/source
     - name: sast-snyk-check
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.20@sha256:f9db697d8a45870b862252de61b3c29d9d6f79272ef8bf61ecb645f8bca27705
       workingDir: /var/workdir/source
       volumeMounts:
         - mountPath: /etc/secrets
@@ -82,7 +82,7 @@ spec:
           SNYK_TOKEN="$(cat ${SNYK_TOKEN_PATH})"
           export SNYK_TOKEN
         else
-          to_enable_snyk='[here](https://redhat-appstudio.github.io/docs.appstudio.io/Documentation/main/how-to-guides/testing_applications/enable_snyk_check_for_a_product/)'
+          to_enable_snyk='[here](https://konflux-ci.dev/docs/how-tos/testing/build/snyk/)'
           note="Task $(context.task.name) skipped: If you wish to use the Snyk code SAST task, please create a secret name snyk-secret with the key "snyk_token" containing the Snyk token by following the steps given ${to_enable_snyk}"
           TEST_OUTPUT=$(make_result_json -r SKIPPED -t "$note")
           echo "${TEST_OUTPUT}" | tee "$(results.TEST_OUTPUT.path)"
@@ -113,7 +113,7 @@ spec:
         fi
         echo "${TEST_OUTPUT:-${ERROR_OUTPUT}}" | tee $(results.TEST_OUTPUT.path)
     - name: upload
-      image: quay.io/konflux-ci/oras:latest@sha256:0fdcb8ad0528042006457e57281532409a4d6e891f61208f96ab2b7b7b1746b6
+      image: quay.io/konflux-ci/oras:latest@sha256:d9fea2ee280880feef6909bef3e18318444231c83736bcc41d54b4e5064f23c9
       workingDir: /var/workdir/source
       env:
         - name: IMAGE_URL

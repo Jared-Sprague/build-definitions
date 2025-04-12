@@ -38,7 +38,7 @@ spec:
       type: array
   steps:
     - name: render
-      image: quay.io/konflux-ci/yq:latest@sha256:4ce1f9431020387eb6c33a28a46e079b0c28b97f916243d150e70a09e41ce6b4
+      image: quay.io/konflux-ci/yq:latest@sha256:5ff4dd745c6f4cc67ae4f00fd2a38dd31f7d99c95dd7ad4476d6a6307a0f40a0
       env:
       - name: SOURCE_DATE_EPOCH
         value: "$(params.source-date-epoch)"

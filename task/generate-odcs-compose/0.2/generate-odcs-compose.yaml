@@ -3,6 +3,12 @@ apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: generate-odcs-compose
+  annotations:
+    build.appstudio.redhat.com/expires-on: "2025-03-15T00:00:00Z"
+    build.appstudio.redhat.com/expiry-message: 'This task is deprecated.
+      Please remove it from your pipeline.'
+  labels:
+    app.kubernetes.io/version: "0.2"
 spec:
   params:
     - name: COMPOSE_INPUTS
@@ -21,7 +27,7 @@ spec:
       description: Directory to write the result .repo files.
   steps:
     - name: generate-odcs-compose
-      image: quay.io/redhat-appstudio/tools@sha256:489272b98d28c2c1348f5e88cdb018c4565eb26a7685ad72f4649f0afdc07255
+      image: quay.io/redhat-appstudio/tools@sha256:89258fa69543312e80180a2308bcb84ef86bb0bcab8f8caa704327fc7d4dd9c9
       env:
         - name: CLIENT_ID
           valueFrom:

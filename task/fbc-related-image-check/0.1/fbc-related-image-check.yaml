@@ -6,6 +6,7 @@ metadata:
   annotations:
     tekton.dev/pipelines.minVersion: "0.12.1"
     tekton.dev/tags: "konflux"
+    build.appstudio.redhat.com/expires-on: "2025-01-31T00:00:00Z"
   name: fbc-related-image-check
 spec:
   description: >-
@@ -17,7 +18,7 @@ spec:
     - name: workspace
   steps:
     - name: check-related-images
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.20@sha256:f9db697d8a45870b862252de61b3c29d9d6f79272ef8bf61ecb645f8bca27705
       # per https://kubernetes.io/docs/concepts/containers/images/#imagepullpolicy-defaulting
       # the cluster will set imagePullPolicy to IfNotPresent
       workingDir: $(workspaces.workspace.path)/hacbs/$(context.task.name)
@@ -30,10 +31,12 @@ spec:
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
+        # shellcheck source=/dev/null
         source /utils.sh
         trap 'handle_error $(results.TEST_OUTPUT.path)' EXIT
 
         FAILEDIMAGES=""
+        # shellcheck disable=SC2046
         catalog="$(opm render $(workspaces.workspace.path)/hacbs/fbc-validation/confdir/)"
 
         # OPM generates catalog file in a way that yaml file could contain stream of JSON objects
@@ -41,6 +44,7 @@ spec:
         # however there is also posibility that catalog.yaml has yaml data in it
 
         status=0
+        # shellcheck disable=SC2086
         relImgs="$(jq -r '.relatedImages[]?.image' <<< ${catalog})" || status=$?
         if [ $status -ne 0 ]; then
           echo "Could not get related images. Make sure catalog.yaml exists in FBC fragment image and it is valid .yaml or .json format."

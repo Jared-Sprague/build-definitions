@@ -3,6 +3,11 @@ apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: verify-signed-rpms
+  annotations:
+    build.appstudio.redhat.com/expires-on: "2025-03-15T00:00:00Z"
+    build.appstudio.redhat.com/expiry-message: 'Instead of using this task, switch
+      to task rpms-signature-scan
+      (https://quay.io/repository/konflux-ci/tekton-catalog/task-rpms-signature-scan)'
 spec:
   params:
     - name: INPUT
@@ -48,7 +53,7 @@ spec:
           --workdir "${WORKDIR}" \
           --status-path "${WORKDIR}"/status
     - name: output-results
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.9@sha256:eee855e60b437d9a55a30e63f2eb7f95d9fd6d3b111c32cac8730c9b7a071394
       volumeMounts:
         - name: workdir
           mountPath: "$(params.WORKDIR)"

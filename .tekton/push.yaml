@@ -94,6 +94,7 @@ spec:
         runAfter:
           - build-appstudio-utils
           - ec-task-checks
+          - create-repositories-if-missing
         workspaces:
           - name: source
             workspace: workspace
@@ -148,6 +149,11 @@ spec:
                 value: "$(params.revision)"
               - name: GIT_URL
                 value: "$(params.git-url)"
+              - name: GITHUB_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: "{{ git_auth_secret }}"
+                    key: "git-provider-token"
               script: |
                 #!/bin/bash
                 set -euo pipefail
@@ -175,6 +181,29 @@ spec:
               secretName: redhat-appstudio-tekton-catalog-build-definitions-pull-secret
           workspaces:
             - name: source
+
+      - name: create-repositories-if-missing
+        runAfter:
+          - build-appstudio-utils
+        taskSpec:
+          steps:
+            - name: run-create-bundle-repos
+              image: quay.io/konflux-ci/appstudio-utils:{{revision}}
+              workingDir: $(workspaces.source.path)/source
+              script: |
+                #!/usr/bin/env bash
+                .tekton/scripts/create-task-pipeline-bundle-repos.sh
+              env:
+                - name: QUAY_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: konflux-ci-repo-creator
+                      key: quaytoken
+          workspaces:
+            - name: source
+        workspaces:
+          - name: source
+            workspace: workspace
 
       - name: update-infra-repo
         runAfter:

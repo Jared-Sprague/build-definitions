@@ -2,7 +2,7 @@
 
 Scans source code for security vulnerabilities, including common issues such as SQL injection, cross-site scripting (XSS), and code injection attacks using Snyk Code, a Static Application Security Testing (SAST) tool.
 
-Follow the steps given [here](https://redhat-appstudio.github.io/docs.appstudio.io/Documentation/main/how-to-guides/testing_applications/enable_snyk_check_for_a_product/) to obtain a snyk-token and to enable the snyk task in a Pipeline.
+Follow the steps given [here](https://konflux-ci.dev/docs/testing/build/snyk/) to obtain a snyk-token and to enable the snyk task in a Pipeline.
 
 The snyk binary used in this Task comes from a container image defined in https://github.com/konflux-ci/konflux-test
 
@@ -13,8 +13,9 @@ See https://snyk.io/product/snyk-code/ and https://snyk.io/ for more information
 |---|---|---|---|
 |ARGS|Append arguments.|""|false|
 |CACHI2_ARTIFACT|The Trusted Artifact URI pointing to the artifact with the prefetched dependencies.|""|false|
+|IGNORE_FILE_PATHS|Directories or files to be excluded from Snyk scan (Comma-separated). Useful to split the directories of a git repo across multiple components.|""|false|
 |IMP_FINDINGS_ONLY|Report only important findings. Default is true. To report all findings, specify "false"|true|false|
-|KFP_GIT_URL|URL from repository to download known false positives files|""|false|
+|KFP_GIT_URL|Known False Positives (KFP) git URL (optionally taking a revision delimited by \#). Defaults to "SITE_DEFAULT", which means the default value "https://gitlab.cee.redhat.com/osh/known-false-positives.git" for internal Konflux instance and empty string for external Konflux instance. If set to an empty string, the KFP filtering is disabled.|SITE_DEFAULT|false|
 |PROJECT_NAME|Name of the scanned project, used to find path exclusions. By default, the Konflux component name will be used.|""|false|
 |RECORD_EXCLUDED|Write excluded records in file. Useful for auditing (defaults to false).|false|false|
 |SNYK_SECRET|Name of secret which contains Snyk token.|snyk-secret|false|

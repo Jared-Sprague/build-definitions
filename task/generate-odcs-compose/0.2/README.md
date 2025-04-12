@@ -1,5 +1,8 @@
 # generate-odcs-compose task
 
+> **Deprecated**: This task is deprecated. Please remove it from your pipeline.
+  Deprecation date: 2025-03-15
+
 ## Description:
 This task generates compose (yum repository) files that can be later on mounted during
 build tasks and used for installing RPMs. It uses ODCS (On Demand Compose Service) for
@@ -27,12 +30,14 @@ Element fields:
 
 Example:
 
+```yaml
 composes:
     - kind: ComposeSourceModule
       spec:
         modules:
           - squid:4:8090020231130092412:a75119d5
       additional_args: {}
+```
 
 [input structure]: https://pagure.io/odcs/blob/master/f/client/odcs/client/odcs.py#_115
 

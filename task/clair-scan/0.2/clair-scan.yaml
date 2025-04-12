@@ -44,12 +44,11 @@ spec:
         readOnly: true
   steps:
     - name: get-image-manifests
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.20@sha256:f9db697d8a45870b862252de61b3c29d9d6f79272ef8bf61ecb645f8bca27705
       # the clair-in-ci image neither has skopeo or jq installed. Hence, we create an extra step to get the image manifest digests
       computeResources:
         limits:
           memory: 512Mi
-          cpu: 200m
         requests:
           memory: 256Mi
           cpu: 100m
@@ -80,13 +79,12 @@ spec:
           done
         fi
     - name: get-vulnerabilities
-      image: quay.io/redhat-appstudio/clair-in-ci:v1  # explicit floating tag, daily updates, per arch call this is exempt for now for use of image digest
+      image: quay.io/konflux-ci/clair-in-ci:v1  # explicit floating tag, daily updates, per arch call this is exempt for now for use of image digest
       computeResources:
         limits:
-          memory: 4Gi
-          cpu: '2'
+          memory: 6Gi
         requests:
-          memory: 1Gi
+          memory: 2Gi
           cpu: 500m
       imagePullPolicy: Always
       env:
@@ -138,7 +136,7 @@ spec:
         images_processed=$(echo "${images_processed_template/\[%s]/[$digests_processed_string]}")
         echo "$images_processed" > images-processed.json
     - name: oci-attach-report
-      image: quay.io/konflux-ci/oras:latest@sha256:0fdcb8ad0528042006457e57281532409a4d6e891f61208f96ab2b7b7b1746b6
+      image: quay.io/konflux-ci/oras:latest@sha256:d9fea2ee280880feef6909bef3e18318444231c83736bcc41d54b4e5064f23c9
       workingDir: /tekton/home
       env:
         - name: IMAGE_URL
@@ -179,13 +177,12 @@ spec:
         done
         echo "${reports_json}" > reports.json
     - name: conftest-vulnerabilities
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.8@sha256:2224fabdb0a28a415d4af4c58ae53d7c4c53c83c315f12e07d1d7f48a80bfa70
+      image: quay.io/konflux-ci/konflux-test:v1.4.20@sha256:f9db697d8a45870b862252de61b3c29d9d6f79272ef8bf61ecb645f8bca27705
       # per https://kubernetes.io/docs/concepts/containers/images/#imagepullpolicy-defaulting
       # the cluster will set imagePullPolicy to IfNotPresent
       computeResources:
         limits:
           memory: 2Gi
-          cpu: 500m
         requests:
           memory: 256Mi
           cpu: 100m

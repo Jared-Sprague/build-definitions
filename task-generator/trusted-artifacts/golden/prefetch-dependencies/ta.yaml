@@ -73,12 +73,12 @@ spec:
         echo -n "${SOURCE_ARTIFACT}" > $(results.SOURCE_ARTIFACT.path)
         echo -n "" > $(results.CACHI2_ARTIFACT.path)
       fi
-  - image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:resolved
+  - image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:resolved
     name: use-trusted-artifact
     args:
       - use
       - $(params.SOURCE_ARTIFACT)=/var/workdir/source
-  - image: quay.io/redhat-appstudio/cachi2:0.7.0@sha256:1fc772aa3636fd0b43d62120d832e5913843e028e8cac42814b487c3a0a32bd8
+  - image: quay.io/konflux-ci/cachi2:0.17.0@sha256:963870f04aeb4a207e79b8eacb47e16c8faa7451f52e92959e0e16cdbd258fb3
     name: prefetch-dependencies
     env:
     - name: INPUT
@@ -147,11 +147,17 @@ spec:
 
       cachi2 --log-level="$LOG_LEVEL" inject-files /var/workdir/cachi2/output \
       --for-output-dir=/cachi2/output
-  - image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:resolved
+  - image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:resolved
     name: create-trusted-artifact
     env:
     - name: IMAGE_EXPIRES_AFTER
       value: $(params.ociArtifactExpiresAfter)
+    computeResources:
+      limits:
+        memory: 3Gi
+      requests:
+        cpu: "1"
+        memory: 3Gi
     args:
       - create
       - --store

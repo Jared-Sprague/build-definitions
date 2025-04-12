@@ -2,14 +2,16 @@ name: Validate PR - buildah-remote
 'on':
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 jobs:
   go:
     name: Check Buildah Remote
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4
       - name: Install Go
-        uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b   # v5
         with:
           go-version-file: './task-generator/remote/go.mod'
       - name: Check buildah remote
@@ -18,6 +20,7 @@ jobs:
           if [[ ! -z $(git status -s) ]]
           then
             echo "buildah-remote is not up to date, run ./hack/generate-buildah-remote.sh"
+            echo "Or run ./hack/generate-everything.sh to run all the generators at once."
             git status -s
             git --no-pager diff
             exit 1
